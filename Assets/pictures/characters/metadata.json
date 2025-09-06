@@ -1,0 +1,62 @@
+[
+    {
+        "path": "Assets/pictures/charactors/02-01-0001.png",
+        "id": "02-01-0001",
+        "event": "02-0001"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-01-0002.png",
+        "id": "02-01-0002",
+        "event": "02-0002"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-01-0003.png",
+        "id": "02-01-0003",
+        "event": "02-0003"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-01-0004.png",
+        "id": "02-01-0004",
+        "event": "02-0004"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-02-0001.png",
+        "id": "02-02-0001",
+        "event": "02-0001"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-02-0002.png",
+        "id": "02-02-0002",
+        "event": "02-0002"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-02-0003.png",
+        "id": "02-02-0003",
+        "event": "02-0003"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-02-0004.png",
+        "id": "02-02-0004",
+        "event": "02-0004"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-03-0001.png",
+        "id": "02-03-0001",
+        "event": "02-0001"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-03-0002.png",
+        "id": "02-03-0002",
+        "event": "02-0002"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-03-0003.png",
+        "id": "02-03-0003",
+        "event": "02-0003"
+    },
+    {
+        "path": "Assets/pictures/charactors/02-03-0004.png",
+        "id": "02-03-0004",
+        "event": "02-0004"
+    }
+]

@@ -1,0 +1,19 @@
+{
+  "title": "test",
+  "bpm": 86.0,
+  "offset": -0.0,
+  "difficulties": {
+    "easy": 2,
+    "normal": 5,
+    "hard": 3,
+    "expert": 9,
+    "master": null
+  },
+  "speedScaleMarkers": [
+    {
+      "beat": 0.0,
+      "forward": 1.0,
+      "reverse": 0.16666666666666666
+    }
+  ]
+}

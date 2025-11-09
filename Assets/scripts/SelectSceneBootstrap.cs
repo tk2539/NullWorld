@@ -105,37 +105,33 @@ public class SelectSceneBootstrap : MonoBehaviour
 
     void PopulateCovers()
     {
+        // 既存の子をクリア
         for (int i = gridContent.childCount - 1; i >= 0; --i)
             Destroy(gridContent.GetChild(i).gameObject);
 
         var grid = gridContent.GetComponent<GridLayoutGroup>();
         if (grid) FitCellSizeToViewport(grid);
 
-        string chartsRoot = Path.Combine(Application.streamingAssetsPath, "charts");
-        if (!Directory.Exists(chartsRoot)) return;
+        // 両方（persistent優先 + streaming）から曲フォルダを列挙
+        var dirs = ChartPaths.EnumerateAllSongDirs();
+        if (dirs == null || dirs.Count == 0)
+        {
+            Debug.Log("[SelectSceneBootstrap] no song directories found.");
+            return;
+        }
 
         int created = 0;
-        foreach (var dir in Directory.GetDirectories(chartsRoot))
+        foreach (var dir in dirs)
         {
-            string coverPath = null;
-            try
-            {
-                foreach (var f in Directory.GetFiles(dir))
-                {
-                    var name = Path.GetFileName(f).ToLowerInvariant();
-                    if (name.StartsWith("cover.") && (name.EndsWith(".png") || name.EndsWith(".jpg") || name.EndsWith(".jpeg")))
-                    {
-                        coverPath = f;
-                        break;
-                    }
-                }
-            }
-            catch { }
+            string folderName = Path.GetFileName(dir);
+
+            // カバー画像パスを解決（なければ null → fallbackTexture が使われる）
+            string coverPath = ChartPaths.ResolveCoverPath(folderName);
 
             var tex = CoverCache.Get(coverPath, fallbackTexture);
             if (!tex) continue;
 
-            var go = new GameObject(Path.GetFileName(dir), typeof(RectTransform), typeof(RawImage), typeof(Button));
+            var go = new GameObject(folderName, typeof(RectTransform), typeof(RawImage), typeof(Button));
             go.transform.SetParent(gridContent, false);
 
             var img = go.GetComponent<RawImage>();
@@ -147,11 +143,11 @@ public class SelectSceneBootstrap : MonoBehaviour
             var btn = go.GetComponent<Button>();
             btn.onClick.AddListener(() =>
             {
-                Debug.Log($"[SelectSceneBootstrap] Click: {Path.GetFileName(dir)}");
+                Debug.Log($"[SelectSceneBootstrap] Click: {folderName}");
                 if (detailUI != null)
                 {
-                    // 右ペインに渡す
-                    detailUI.SetData(tex, Path.GetFileName(dir));
+                    // 右ペインに渡す（folderName をキーに使う）
+                    detailUI.SetData(tex, folderName);
                 }
             });
             created++;

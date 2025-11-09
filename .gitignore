@@ -97,3 +97,11 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# macOS system files
+.DS_Store
+._*
+
+# VSCode workspace settings
+.vscode/
+*.code-workspace

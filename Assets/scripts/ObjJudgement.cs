@@ -8,7 +8,7 @@ using System.Collections.Generic;
 public class ObjJudgement : MonoBehaviour
 {
     [Header("Judge")]
-    public float judgeWindow = 0.05f; // 100ms
+    public float judgeWindow = 0.01f; // 100ms
     public GameObject noteParent;
 
     [Header("HUD")]
@@ -157,7 +157,7 @@ public class ObjJudgement : MonoBehaviour
     }
 
     // キュー先頭だけで判定
-    void JudgeFromQueue(int groupIndex, int typeIndex)
+    bool JudgeFromQueue(int groupIndex, int typeIndex)
     {
         var q = lanes[groupIndex][typeIndex];
         while (q.Count > 0)
@@ -168,10 +168,16 @@ public class ObjJudgement : MonoBehaviour
             float now = Time.time - n.startTime;
             float diff = Mathf.Abs(n.arrivalTime - now);
 
-            if (diff <= judgeWindow)            { ApplyHit(n, n.transform, Judge.Perfect); q.Dequeue(); return; }
-            else if (diff <= judgeWindow * 2f)  { ApplyHit(n, n.transform, Judge.Great);   q.Dequeue(); return; }
-            else if (diff <= judgeWindow * 3f)  { ApplyHit(n, n.transform, Judge.Good);    q.Dequeue(); return; }
-            else if (n.arrivalTime + judgeWindow * 5f < now)
+            if (diff <= judgeWindow)            { ApplyHit(n, n.transform, Judge.Perfect); q.Dequeue(); return true; }
+            else if (diff <= judgeWindow * 2f)  { ApplyHit(n, n.transform, Judge.Great);   q.Dequeue(); return true; }
+            else if (diff <= judgeWindow * 3f)  { ApplyHit(n, n.transform, Judge.Good);    q.Dequeue(); return true; }
+            else if (diff <= judgeWindow * 4f)
+            {
+                ApplyBad(n, n.transform);
+                q.Dequeue();
+                return true;
+            }
+            else if (n.arrivalTime + judgeWindow * 4f < now)
             {
                 // AutoMiss 相当（取りこぼし防止）
                 ApplyMiss(n, n.transform); q.Dequeue(); continue;
@@ -179,6 +185,7 @@ public class ObjJudgement : MonoBehaviour
             // まだ手前 → 次フレームまで待つ
             break;
         }
+        return false;
     }
 
     // 全レーンの先頭だけを自動ミス処理
@@ -255,15 +262,15 @@ public class ObjJudgement : MonoBehaviour
         int gi = Mathf.Clamp(groupIndex - 1, 0, 3);
         if (isFlick)
         {
-            // flick のみ
-            JudgeFromQueue(gi, 2);
+            // flick のみ（1押しで最大1ノーツ）
+            if (JudgeFromQueue(gi, 2)) return;
         }
         else
         {
-            // normal / critical / longstart の順に1個だけ判定
-            JudgeFromQueue(gi, 0);
-            JudgeFromQueue(gi, 1);
-            JudgeFromQueue(gi, 3);
+            // normal / critical / longstart の順で1つ見つけたら終了
+            if (JudgeFromQueue(gi, 0)) return; // normal
+            if (JudgeFromQueue(gi, 1)) return; // critical
+            if (JudgeFromQueue(gi, 3)) return; // longstart
         }
     }
 
@@ -289,6 +296,14 @@ public class ObjJudgement : MonoBehaviour
         }
     }
     bool Overlaps(LaneRange a, LaneRange b) => (a.from <= b.to) && (b.from <= a.to);
+
+    // ===== Judgement popup helper =====
+    void ShowJudgePopup(Transform tf, JudgementType type)
+    {
+        if (JudgementPopupManager.I == null) return;
+        Vector3 pos = tf ? tf.position : transform.position;
+        JudgementPopupManager.I.Show(pos, type);
+    }
 
     // ── 判定適用
     enum Judge { Perfect, Great, Good }
@@ -345,6 +360,11 @@ public class ObjJudgement : MonoBehaviour
         else if (j == Judge.Great)   greatCount++;
         else                         goodCount++;
 
+        // Popup
+        if (j == Judge.Perfect)      ShowJudgePopup(tf, JudgementType.Perfect);
+        else if (j == Judge.Great)   ShowJudgePopup(tf, JudgementType.Great);
+        else                         ShowJudgePopup(tf, JudgementType.Good);
+
         // 破棄（longstartは親ごと）
         if (note.type == "longstart" && tf && tf.parent) Destroy(tf.parent.gameObject);
         else if (tf) Destroy(tf.gameObject);
@@ -363,6 +383,7 @@ public class ObjJudgement : MonoBehaviour
     {
         if (note) _consumed.Add(note);
         if (audioSource && missSE) audioSource.PlayOneShot(missSE);
+        ShowJudgePopup(tf, JudgementType.Bad);
         if (note.type == "longstart" && tf && tf.parent) Destroy(tf.parent.gameObject);
         else if (tf) Destroy(tf.gameObject);
         combo = 0; badCount++;
@@ -373,6 +394,7 @@ public class ObjJudgement : MonoBehaviour
     {
         if (note) _consumed.Add(note);
         if (audioSource && missSE) audioSource.PlayOneShot(missSE);
+        ShowJudgePopup(tf, JudgementType.Miss);
         if (note.type == "longstart" && tf && tf.parent) Destroy(tf.parent.gameObject);
         else if (tf) Destroy(tf.gameObject);
         combo = 0; missCount++;
@@ -471,6 +493,5 @@ public class ObjJudgement : MonoBehaviour
         PlayerPrefs.Save();
 
         yield return new WaitForSeconds(1.0f);
-        SceneManager.LoadScene("result");
     }
 }

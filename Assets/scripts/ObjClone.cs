@@ -20,6 +20,11 @@ public class ObjClone : MonoBehaviour
     [Tooltip("見た目の基準スピード（Z/分, 正の値）。逆走は区間/方向倍率で制御する想定")]
     public float baseSpeedAbs = 1200f;
 
+    // === Player Speed Multiplier ===
+    [Header("Player Note Speed Multiplier")]
+    [Tooltip("6.0〜12.0まで設定可能。10.0がデフォルト。プレイヤー設定から変更される。")]
+    public static float userSpeedMultiplier = 1.0f; // 10.0相当（=1.0）
+
     [System.Serializable]
     public struct SpeedScaleMarker
     {
@@ -28,14 +33,20 @@ public class ObjClone : MonoBehaviour
         public float reverse;  // 逆走倍率（<=0 は無視）
     }
 
+    /// <summary>
+    /// メタデータ: BPM, speedScaleMarkers, rootoffsetMs（譜面全体の開始オフセット[ms]）
+    /// </summary>
     [System.Serializable]
-    class Metadata { public float bpm; public SpeedScaleMarker[] speedScaleMarkers; }
+    class Metadata { public float bpm; public SpeedScaleMarker[] speedScaleMarkers; public float rootoffsetMs; }
 
     // metadata.json から読み込む区間ソフランのマーカー
     private List<SpeedScaleMarker> _markers = new List<SpeedScaleMarker>();
     // クローン順に処理するための実行リスト
     private readonly List<Transform> _moveOrder = new List<Transform>();
     private float _lastPruneTime = 0f;
+
+    // metadata.rootoffsetMs を秒にした値（+で全体を後ろへ、-で前へ）
+    public static float GlobalRootOffsetSec { get; private set; } = 0f;
 
     bool UseBeats => timesAreBeats && bpm > 1e-3f;
 
@@ -80,7 +91,7 @@ public class ObjClone : MonoBehaviour
 
             // 区間開始拍の倍率を採用
             float dirScale = GetDirScaleForBeat(segStart, sign >= 0 ? 1 : -1);
-            float speedPerMin = Mathf.Abs(rawSpeedAbs) * Mathf.Max(0f, dirScale);
+            float speedPerMin = Mathf.Abs(rawSpeedAbs) * Mathf.Max(0f, dirScale) * userSpeedMultiplier;
             sum += BeatsToZ(segBeats, speedPerMin);
         }
 
@@ -184,22 +195,42 @@ public class ObjClone : MonoBehaviour
     {
         // シーン上の見本オブジェクトは最初に非表示（クローンのみ表示）
         DeactivateTemplatePrefabsInScene();
+        // プレイヤー設定のノーツ速度（6.0〜12.0, 10.0基準）を読み込む
+        float savedSpeed = PlayerPrefs.GetFloat("NoteSpeed", 10.0f);
+        userSpeedMultiplier = Mathf.Clamp(savedSpeed, 6.0f, 12.0f) / 10.0f;
 
-        // ★ ここで開始時刻を固定してからノーツ生成（FillInfoで参照される）
-        chartStartTimeForAllNotes = Time.time;
-
-        // Selectシーンで保存した選択情報からパスを組み立て
+        // Selectシーンで保存した選択情報から robust にパスを解決
         string folder = PlayerPrefs.GetString("SongFolder", "all_notes");
-        string chart = PlayerPrefs.GetString("ChartFile", "expert.json");
-        string chartsRoot = Path.Combine(Application.streamingAssetsPath, "charts");
-        string chartPath = Path.Combine(chartsRoot, folder, chart);
-        string metaPath = Path.Combine(chartsRoot, folder, "metadata.json");
+        string chartName = PlayerPrefs.GetString("ChartFile", "");
 
-        if (!File.Exists(chartPath))
+        // ==== Resolve chart path (persistent優先 / フルパス優先) ====
+        string chartPath = null;
+        if (!string.IsNullOrEmpty(chartName) && (Path.IsPathRooted(chartName) || chartName.StartsWith("/")))
         {
-            Debug.LogWarning($"[ObjClone] Chart not found: {chartPath}");
+            if (File.Exists(chartName)) chartPath = chartName;
+        }
+        if (chartPath == null && !string.IsNullOrEmpty(folder) && !string.IsNullOrEmpty(chartName))
+        {
+            chartPath = ChartPaths.ResolveChartJsonPath(folder, chartName);
+        }
+        if (chartPath == null && !string.IsNullOrEmpty(folder))
+        {
+            // fallback: 既定名の探索
+            string[] order = { "master.json", "expert.json", "hard.json", "normal.json", "easy.json", "chart.json", "index.json" };
+            foreach (var name in order)
+            {
+                var p = ChartPaths.ResolveChartJsonPath(folder, name);
+                if (!string.IsNullOrEmpty(p)) { chartPath = p; break; }
+            }
+        }
+        if (string.IsNullOrEmpty(chartPath) || !File.Exists(chartPath))
+        {
+            Debug.LogWarning($"[ObjClone] Chart not found. folder='{folder}' chart='{chartName}'");
             return;
         }
+
+        // ==== Resolve metadata ====
+        string metaPath = ChartPaths.ResolveMetadataPath(folder);
 
         // metadata.json から BPM / speedScaleMarkers を読む
         try
@@ -216,10 +247,18 @@ public class ObjClone : MonoBehaviour
                     _markers.AddRange(md.speedScaleMarkers);
                     _markers.Sort((a, b) => a.beat.CompareTo(b.beat));
                 }
+                // rootoffsetMs: 音源と譜面の両方を同じ時間だけずらす（秒）。
+                GlobalRootOffsetSec = (md != null) ? (md.rootoffsetMs / 1000f) : 0f;
             }
-            else bpm = 0f;
+            else
+            {
+                bpm = 0f;
+            }
         }
         catch { bpm = 0f; }
+
+        // ★ 開始時刻をメタの rootoffsetMs でシフト（+なら遅らせる / -なら早める）
+        chartStartTimeForAllNotes = Time.time + GlobalRootOffsetSec;
 
         Debug.Log($"[ObjClone] Load chart: {chartPath}\nBPM={bpm}, UseBeats={UseBeats}, chartStart={chartStartTimeForAllNotes:F3}");
 
@@ -231,7 +270,7 @@ public class ObjClone : MonoBehaviour
     public void LoadChart(string path)
     {
         // リロード時にも開始時刻を固定（再生中の再ロード対策）
-        if (chartStartTimeForAllNotes <= 0f) chartStartTimeForAllNotes = Time.time;
+        if (chartStartTimeForAllNotes <= 0f) chartStartTimeForAllNotes = Time.time + GlobalRootOffsetSec;
 
         // 既存ノーツ消去
         foreach (Transform child in transform) Destroy(child.gameObject);
@@ -346,7 +385,7 @@ public class ObjClone : MonoBehaviour
                            : Mathf.RoundToInt(Mathf.Abs(baseSpeedAbs));
 
             float dirScale = GetDirScaleForBeat(noteBeatAbs, rawSpeed >= 0 ? 1 : -1);
-            float scaledSpeed = rawSpeed * dirScale;      // 見た目用の実効速度(Z/分)
+            float scaledSpeed = rawSpeed * dirScale * userSpeedMultiplier; // プレイヤー設定反映
             float speedPerSec = scaledSpeed / 60f;        // Z/秒（符号付き）
 
             // ★ 拍モード時はマーカーを積分して見た目距離を算出（可変HSでも先端が合う）
@@ -668,7 +707,7 @@ public class ObjClone : MonoBehaviour
         }
 
         var rxData = new System.Text.RegularExpressions.Regex(@"^\s*#(?<meas>\d{3})(?<chan>[0-9A-Za-z]{2,3})\s*:\s*(?<data>[0-9A-Za-z]+)");
-        var rx02   = new System.Text.RegularExpressions.Regex(@"^\s*#(?<meas>\d{3})02\s*:\s*(?<len>[0-9]+(?:\.[0-9]+)?)\s*$");
+        var rx02 = new System.Text.RegularExpressions.Regex(@"^\s*#(?<meas>\d{3})02\s*:\s*(?<len>[0-9]+(?:\.[0-9]+)?)\s*$");
         var rxMEASBS = new System.Text.RegularExpressions.Regex(@"^\s*#MEASUREBS\s+(?<base>\d+)\s*$");
 
         int measBase = 0;

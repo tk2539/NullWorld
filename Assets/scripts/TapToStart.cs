@@ -5,15 +5,11 @@ public class TapToStart : MonoBehaviour
 {
     void Update()
     {
-        // マウスクリックまたは画面タップ
-        if (Input.GetMouseButtonDown(0) || Input.touchCount > 0)
-        {
-            // シーン切り替え
-            SceneManager.LoadScene("home"); // "GameScene"を次のシーン名に
-        }
+        // マウス/タッチは無視して、キーボードのみで反応させる
+        bool mouse = Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2);
+        bool touch = Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
 
-        // キーボード（スペースやエンターでも進むなら）
-        if (Input.anyKeyDown)
+        if (Input.anyKeyDown && !mouse && !touch)
         {
             SceneManager.LoadScene("home");
         }

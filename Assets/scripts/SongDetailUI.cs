@@ -102,8 +102,8 @@ public class SongDetailUI : MonoBehaviour
     {
         try
         {
-            string metaPath = Path.Combine(Application.streamingAssetsPath, "charts", folderName, "metadata.json");
-            if (File.Exists(metaPath))
+            string metaPath = ChartPaths.ResolveMetadataPath(folderName);
+            if (!string.IsNullOrEmpty(metaPath) && File.Exists(metaPath))
             {
                 var json = File.ReadAllText(metaPath);
                 var m = JsonUtility.FromJson<Meta>(json);
@@ -182,7 +182,14 @@ public class SongDetailUI : MonoBehaviour
 
     void RefreshDifficultyButtons()
     {
-        string dir = Path.Combine(Application.streamingAssetsPath, "charts", folder);
+        string dir = ChartPaths.ResolveSongDir(folder);
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+        {
+            Debug.LogWarning($"[SongDetailUI] song dir not found: {folder}");
+            SetButtonsInteractable(false, false, false, false, false);
+            return;
+        }
+
         string eName = FindChartFileInDir(dir, "easy");
         string nName = FindChartFileInDir(dir, "normal");
         string hName = FindChartFileInDir(dir, "hard");
@@ -326,7 +333,13 @@ public class SongDetailUI : MonoBehaviour
             return;
         }
 
-        string dir = Path.Combine(Application.streamingAssetsPath, "charts", folder);
+        string dir = ChartPaths.ResolveSongDir(folder);
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+        {
+            Debug.LogWarning($"[SongDetailUI] 曲フォルダが見つかりません: {folder}");
+            return;
+        }
+
         string finalChart = selectedChartFile;
         bool existsExact(string f) => !string.IsNullOrEmpty(f) && File.Exists(Path.Combine(dir, f));
 
@@ -353,30 +366,15 @@ public class SongDetailUI : MonoBehaviour
             return;
         }
 
-        string audioFilePath = null;
-        string mp3Path = Path.Combine(dir, "song.mp3");
-        string oggPath = Path.Combine(dir, "song.ogg");
-
-        if (File.Exists(mp3Path))
-        {
-            audioFilePath = mp3Path;
-        }
-        else if (File.Exists(oggPath))
-        {
-            audioFilePath = oggPath;
-        }
-
+        string audioFilePath = ChartPaths.ResolveAudioPath(folder);
         if (string.IsNullOrEmpty(audioFilePath))
         {
-             Debug.LogWarning($"[SongDetailUI] 音源ファイルが見つかりません: {dir}");
+            Debug.LogWarning($"[SongDetailUI] 音源ファイルが見つかりません: {folder}");
         }
-
-        if (!string.IsNullOrEmpty(audioFilePath) && MusicPlayer.Instance != null)
+        else if (MusicPlayer.Instance != null)
         {
-            // パスが渡されているか確認するためのログ
-            Debug.Log($"[SongDetailUI] Audio file path to pass: {audioFilePath}");
-
-            MusicPlayer.Instance.PlayFromFile(audioFilePath);
+            Debug.Log($"[SongDetailUI] Queue audio: {audioFilePath}");
+            MusicPlayer.Instance.QueueForGame(audioFilePath, loop: false, startTime: 0f);
         }
 
         PlayerPrefs.SetString("SongFolder", folder);
